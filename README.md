@@ -43,4 +43,3 @@ The project includes:
 
 MIT
 
-TODO:
