@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>3D Collision Detection Simulator</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Include Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+      /***********************
+       * Custom AABB Class
+       ***********************/
+      class AABB {
+        constructor(options = {}) {
+          // If bounds are provided use them, otherwise initialize with extreme values.
+          this.lowerBound = options.lowerBound
+            ? options.lowerBound.clone()
+            : new THREE.Vector3(Infinity, Infinity, Infinity);
+          this.upperBound = options.upperBound
+            ? options.upperBound.clone()
+            : new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+        }
+
+        // Copies the bounds from another AABB
+        copy(aabb) {
+          this.lowerBound.copy(aabb.lowerBound);
+          this.upperBound.copy(aabb.upperBound);
+          return this;
+        }
+
+        // Creates a clone of this AABB
+        clone() {
+          return new AABB({
+            lowerBound: this.lowerBound.clone(),
+            upperBound: this.upperBound.clone(),
+          });
+        }
+
+        // Extend this AABB to also cover another AABB
+        extend(aabb) {
+          this.lowerBound.min(aabb.lowerBound);
+          this.upperBound.max(aabb.upperBound);
+          return this;
+        }
+
+        // Checks if this AABB overlaps with another
+        overlaps(aabb) {
+          if (
+            this.upperBound.x < aabb.lowerBound.x ||
+            this.lowerBound.x > aabb.upperBound.x
+          )
+            return false;
+          if (
+            this.upperBound.y < aabb.lowerBound.y ||
+            this.lowerBound.y > aabb.upperBound.y
+          )
+            return false;
+          if (
+            this.upperBound.z < aabb.lowerBound.z ||
+            this.lowerBound.z > aabb.upperBound.z
+          )
+            return false;
+          return true;
+        }
+
+        // Set the AABB from an array of points (THREE.Vector3)
+        setFromPoints(points) {
+          this.lowerBound.set(Infinity, Infinity, Infinity);
+          this.upperBound.set(-Infinity, -Infinity, -Infinity);
+          points.forEach((p) => {
+            this.lowerBound.min(p);
+            this.upperBound.max(p);
+          });
+          return this;
+        }
+      }
+
+      /***********************
+       * Three.js Setup
+       ***********************/
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+      );
+      camera.position.set(0, 0, 8);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      /***********************
+       * Create Objects
+       ***********************/
+      // Cube 1 (stationary)
+      const cubeGeom = new THREE.BoxGeometry(2, 2, 2);
+      const cubeMat1 = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+      const cube1 = new THREE.Mesh(cubeGeom, cubeMat1);
+      scene.add(cube1);
+
+      // Cube 2 (moving)
+      const cubeMat2 = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+      const cube2 = new THREE.Mesh(cubeGeom, cubeMat2);
+      cube2.position.set(3, 0, 0);
+      scene.add(cube2);
+
+      // Create wireframe helpers to visualize Three.js bounding boxes
+      const helper1 = new THREE.BoxHelper(cube1, 0xffff00);
+      scene.add(helper1);
+      const helper2 = new THREE.BoxHelper(cube2, 0xffff00);
+      scene.add(helper2);
+
+      /***********************
+       * Compute Custom AABB for a Mesh
+       ***********************/
+      function computeAABB(mesh) {
+        // Ensure world matrix is updated
+        mesh.updateMatrixWorld();
+        const positions = mesh.geometry.attributes.position.array;
+        const points = [];
+        for (let i = 0; i < positions.length; i += 3) {
+          const p = new THREE.Vector3(
+            positions[i],
+            positions[i + 1],
+            positions[i + 2]
+          );
+          // Transform the point into world space
+          p.applyMatrix4(mesh.matrixWorld);
+          points.push(p);
+        }
+        const aabb = new AABB();
+        aabb.setFromPoints(points);
+        return aabb;
+      }
+
+      /***********************
+       * Animation Loop
+       ***********************/
+      function animate() {
+        requestAnimationFrame(animate);
+
+        // Move cube2 back and forth along the X axis.
+        cube2.position.x = 3 + Math.sin(Date.now() * 0.001) * 2;
+
+        // Update the BoxHelpers so that they follow the objects.
+        helper1.update();
+        helper2.update();
+
+        // Compute custom AABBs for both cubes.
+        const aabb1 = computeAABB(cube1);
+        const aabb2 = computeAABB(cube2);
+
+        // Check for collision between the two AABBs.
+        if (aabb1.overlaps(aabb2)) {
+          cube1.material.color.set(0x0000ff);
+          cube2.material.color.set(0x0000ff);
+        } else {
+          cube1.material.color.set(0x00ff00);
+          cube2.material.color.set(0xff0000);
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+
+      /***********************
+       * Handle Window Resize
+       ***********************/
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    </script>
+  </body>
+</html>
